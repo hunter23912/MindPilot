@@ -1,0 +1,5 @@
+,eeg_similarity,eeg_similarity,eeg_similarity,time_seconds,time_seconds,gpu_memory_gb,gpu_memory_gb,n_samples_used
+,mean,std,max,mean,std,mean,max,mean
+method_name,,,,,,,,
+HeuristicClosedLoop,0.5271,0.0123,0.5536,1.1141,0.1156,0.0098,0.0098,5.0
+PseudoModel,0.5288,0.0219,0.5747,6.8584,0.4083,12.2439,12.2602,5.0

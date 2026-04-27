@@ -1,0 +1,120 @@
+name: MindPilot
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - ipykernel
+  - ipython
+  - jupyter
+  - jupyterlab
+  - numpy
+  - pandas
+  - matplotlib
+  - scikit-learn
+  - scipy
+  - seaborn
+  - flask
+  - sqlalchemy
+  - pillow
+  - requests
+  - beautifulsoup4
+  - lxml
+  - pyyaml
+  - cryptography
+  - ffmpeg
+  - pytorch
+  - torchvision
+  - torchaudio
+  - cudatoolkit
+  - mne
+  - pip:
+    - accelerate==1.13.0
+    - addict==2.4.0  # TODO: not installed, needs reinstall
+    - altair==5.2.0  # TODO: not installed, needs reinstall
+    - annotated-types==0.7.0
+    - ansi2html==1.9.1  # TODO: not installed, needs reinstall
+    - antlr4-python3-runtime==4.9.3  # TODO: not installed, needs reinstall
+    - appdirs==1.4.4  # TODO: not installed, needs reinstall
+    - astor==0.8.1  # TODO: not installed, needs reinstall
+    - bids==0.0  # TODO: not installed, needs reinstall
+    - bids-validator==1.13.1  # TODO: not installed, needs reinstall
+    - blinker==1.9.0
+    - blis==0.7.11  # TODO: not installed, needs reinstall
+    - braceexpand==0.1.7
+    - braindecode==0.8.1  # TODO: not installed, needs reinstall
+    - cachetools==5.3.2  # TODO: not installed, needs reinstall
+    - catalogue==2.0.10  # TODO: not installed, needs reinstall
+    - cfgv==3.4.0  # TODO: not installed, needs reinstall
+    - click==8.2.1
+    - cloudpathlib==0.16.0  # TODO: not installed, needs reinstall
+    - confection==0.1.4  # TODO: not installed, needs reinstall
+    - configargparse==1.7  # TODO: not installed, needs reinstall
+    - contexttimer==0.3.3  # TODO: not installed, needs reinstall
+    - contourpy==1.3.1
+    - cycler==0.12.1
+    - cymem==2.0.8  # TODO: not installed, needs reinstall
+    - dash==2.14.2  # TODO: not installed, needs reinstall
+    - dash-core-components==2.0.0  # TODO: not installed, needs reinstall
+    - dash-html-components==2.0.0  # TODO: not installed, needs reinstall
+    - dash-table==5.0.0  # TODO: not installed, needs reinstall
+    - decorator==5.2.1
+    - decord==0.6.0  # TODO: not installed, needs reinstall
+    - diffusers==0.37.1
+    - transformers==5.6.2
+    - distlib==0.3.8  # TODO: not installed, needs reinstall
+    - docker-pycreds==0.4.0  # TODO: not installed, needs reinstall
+    - docopt==0.6.2  # TODO: not installed, needs reinstall
+    - docstring-inheritance==2.1.0  # TODO: not installed, needs reinstall
+    - easydict==1.9  # TODO: not installed, needs reinstall
+    - einops==0.8.2
+    - evdev==1.6.1  # TODO: not installed, needs reinstall
+    - fairscale==0.4.4  # TODO: not installed, needs reinstall
+    - filelock==3.29.0
+    - fonttools==4.62.1
+    - formulaic==0.5.2  # TODO: not installed, needs reinstall
+    - fsspec==2026.3.0
+    - ftfy==6.3.1
+    - gitdb==4.0.12
+    - gitpython==3.1.47
+    - greenlet==3.0.1  # TODO: not installed, needs reinstall
+    - h5py==3.16.0
+    - huggingface-hub==1.12.0
+    - identify==2.5.33  # TODO: not installed, needs reinstall
+    - imageio==2.37.3
+    - imageio-ffmpeg==0.4.9  # TODO: not installed, needs reinstall
+    - importlib-metadata==8.7.0
+    - interface-meta==1.3.0  # TODO: not installed, needs reinstall
+    - iopath==0.1.10  # TODO: not installed, needs reinstall
+    - itsdangerous==2.2.0
+    - joblib==1.5.3
+    - kaggle==1.5.16  # TODO: not installed, needs reinstall
+    - kiwisolver==1.4.9
+    - langcodes==3.3.0  # TODO: not installed, needs reinstall
+    - lazy-loader==0.5
+    - llvmlite==0.47.0
+    - markdown-it-py==3.0.0  # TODO: not installed, needs reinstall
+    - matplotlib==3.10.8
+    - mne==1.5.1  # TODO: not installed, needs reinstall
+    - mne-bids==0.13  # TODO: not installed, needs reinstall
+    - moviepy==1.0.3  # TODO: not installed, needs reinstall
+    - murmurhash==1.0.10  # TODO: not installed, needs reinstall
+    - nbformat==5.10.4
+    - networkx==3.4.2
+    - clip-retrieval==2.45.0
+    - clip==0.2.0
+    - dalle2-pytorch==1.15.6
+    - gpytorch==1.15.2
+    - kornia==0.8.2
+    - natsort==8.4.0
+    - open-clip-torch==2.32.0
+    - sentence-transformers==2.7.0
+    - timm==1.0.26
+    - torchmetrics==1.9.0
+    - umap-learn==0.5.12
+    - webdataset==0.2.111
+    - mne==1.5.1
+
