@@ -1,0 +1,6 @@
+,EEG_Score,EEG_Score,EEG_Score,EEG_Score,CLIP_Score,CLIP_Score,CLIP_Score,CLIP_Score
+,mean,std,min,max,mean,std,min,max
+Method,,,,,,,,
+eeg_guidance,0.5634,0.0151,0.5303,0.6155,0.6578,0.0568,0.5587,0.7921
+random_generation,0.5365,0.0226,0.4814,0.5987,0.5776,0.0236,0.5197,0.6494
+target_image_guidance,0.5523,0.0206,0.46,0.5946,0.7628,0.0747,0.596,0.9339

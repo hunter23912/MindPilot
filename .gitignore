@@ -6,3 +6,4 @@ data/things-eeg2/.cache/
 **/__pycache__/
 **/*.pyc
 open_clip_pytorch_model.bin
+.claude/

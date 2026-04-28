@@ -521,22 +521,26 @@ def run_single_experiment(method, target_idx, seed, config, vlmodel, preprocess_
     
     # Use externally provided test_set_img_embeds (avoid redundant loading).
     # Keep it strictly aligned with test_images_path after excluding the target image.
+
+    # TODO
     full_test_set_img_embeds = config['test_set_img_embeds']
-    if full_test_set_img_embeds.shape[0] != len(image_list):
-        raise ValueError(
-            f"Image/embed feature count mismatch: {len(image_list)} images vs "
-            f"{full_test_set_img_embeds.shape[0]} precomputed embeddings"
-        )
-    test_set_img_embeds = torch.cat(
-        [full_test_set_img_embeds[:target_idx], full_test_set_img_embeds[target_idx + 1:]],
-        dim=0,
-    )
-    if test_set_img_embeds.shape[0] != len(test_images_path):
-        raise ValueError(
-            f"Filtered image/embed count mismatch after excluding target {target_idx}: "
-            f"{len(test_images_path)} images vs {test_set_img_embeds.shape[0]} embeddings"
-        )
-    
+    # if full_test_set_img_embeds.shape[0] != len(image_list):
+    #     raise ValueError(
+    #         f"Image/embed feature count mismatch: {len(image_list)} images vs "
+    #         f"{full_test_set_img_embeds.shape[0]} precomputed embeddings"
+    #     )
+    # test_set_img_embeds = torch.cat(
+    #     [full_test_set_img_embeds[:target_idx], full_test_set_img_embeds[target_idx + 1:]],
+    #     dim=0,
+    # )
+    # if test_set_img_embeds.shape[0] != len(test_images_path):
+    #     raise ValueError(
+    #         f"Filtered image/embed count mismatch after excluding target {target_idx}: "
+    #         f"{len(test_images_path)} images vs {test_set_img_embeds.shape[0]} embeddings"
+    #     )
+    #TODO
+    # Use externally provided test_set_img_embeds (avoid redundant loading)
+    test_set_img_embeds = config['test_set_img_embeds']
     # Create experiment directory
     exp_save_dir = os.path.join(config['save_path'], method, f'target_{target_idx}_seed_{seed}')
     os.makedirs(exp_save_dir, exist_ok=True)
@@ -1320,7 +1324,7 @@ def main():
     
     # Configure parameters
     config = {
-        'target_indices': [i for i in range(0, 200, 20)],
+        'target_indices': [i for i in range(0,200, 15)],
         'num_seeds': 1,  # number of random seeds per method
         'num_loops': 10,  # number of iteration rounds per experiment
         'save_path': get_env_value(

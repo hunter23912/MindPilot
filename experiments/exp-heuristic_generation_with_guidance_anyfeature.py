@@ -1,38 +1,36 @@
 import os
-
-proxy="10.16.11.87:7890"
-os.environ['http_proxy'] = proxy
-os.environ['https_proxy'] = proxy
-
-import numpy as np
-import torch
-import sys
 import random
-from PIL import Image
-from scipy.special import softmax
-import open_clip
-from mne.time_frequency import psd_array_multitaper
-import torch.nn.functional as F
-import torch.nn as nn
-from scipy.special import softmax
-from datetime import datetime
-sys.path.append('/home/ldy/Workspace/Closed_loop_optimizing')
-sys.path.append('/home/ldy/Workspace/Closed_loop_optimizing/model')
-# from torchvision import transforms
-from torchvision import models
-from model.utils import load_model_encoder, generate_eeg, save_eeg_signal
-import matplotlib.pyplot as plt
-from model.custom_pipeline_low_level import Generator4Embeds
-from IPython.display import display
-import torchvision.transforms as transforms
-from model.ATMS_retrieval import ATMS, get_eeg_features
+import sys
+# proxy = "10.16.11.87:7890"
+# os.environ["http_proxy"] = proxy
+# os.environ["https_proxy"] = proxy
 
-import numpy as np
-from util import save_eeg, get_gteeg
 import einops
+import matplotlib.pyplot as plt
+import numpy as np
+import open_clip
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torchvision.transforms as transforms
+from PIL import Image
+from datetime import datetime
+from mne.time_frequency import psd_array_multitaper
+from scipy.special import softmax
+
+from mindpilot_paths import get_env_value, get_project_root, load_mindpilot_env
+
+load_mindpilot_env()
+
+project_root = get_project_root()
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "model"))
+
+from model.utils import load_model_encoder, generate_eeg, save_eeg_signal
+from model.custom_pipeline_low_level import Generator4Embeds
+from model.ATMS_retrieval import ATMS, get_eeg_features
 from model.pseudo_target_model import PseudoTargetModel
-from huggingface_hub import hf_hub_download
-from safetensors.torch import load_file
+
 import logging
 logging.getLogger("diffusers").setLevel(logging.WARNING)
 
@@ -43,24 +41,95 @@ model_type = 'ViT-H-14'
 vlmodel, preprocess_train, feature_extractor = open_clip.create_model_and_transforms(
     model_type, pretrained='laion2b_s32b_b79k', precision='fp32', device = device)
 vlmodel.to(device)
-
-
 generator = Generator4Embeds(device=device)
-
 pipe = generator.pipe
 
+image_dir = get_env_value(
+    "TEST_IMAGE_DIR",
+    default=os.path.join(str(project_root), "data", "things-eeg2", "test_images_flat"),
+)
+embed_dir = get_env_value(
+    "CLIP_EMBED_DIR",
+    default=os.path.join(str(project_root), "data", "things-eeg2", "clip_image_embeds"),
+)
+save_root = get_env_value(
+    "HEURISTIC_OUTPUT_DIR",
+    default=os.path.join(str(project_root), "benchmark_results_total", "benchmark_heuristic_generation_with_guidance_anyfeature"),
+)
+method_name = get_env_value("HEURISTIC_METHOD_NAME", default="eeg_guidance")
 
-# Configure image and embed directories
-image_dir = '/home/ldy/Workspace/Closed_loop_optimizing/test_images'
-embed_dir = '/home/ldy/Workspace/Closed_loop_optimizing/data/clip_embed/2025-09-21'
-
-# Get all image and embed paths, sorted to ensure one-to-one correspondence
-image_list = sorted([f for f in os.listdir(image_dir) if f.lower().endswith(('.jpg','.png','.jpeg'))])
-embed_list = sorted([f for f in os.listdir(embed_dir) if f.endswith('_embed.pt')])
+image_list = sorted([f for f in os.listdir(image_dir) if f.lower().endswith((".jpg", ".png", ".jpeg"))])
+embed_list = sorted([f for f in os.listdir(embed_dir) if f.endswith("_embed.pt")])
 
 
+def _validate_image_embed_alignment(image_filenames, embed_filenames):
+    if len(image_filenames) != len(embed_filenames):
+        raise ValueError(
+            f"Image/embed count mismatch: {len(image_filenames)} images vs {len(embed_filenames)} embeds"
+        )
 
-def main_loop(target_idx):
+    for idx, (image_name, embed_name) in enumerate(zip(image_filenames, embed_filenames)):
+        image_stem, _ = os.path.splitext(image_name)
+        embed_stem = embed_name.removesuffix("_embed.pt")
+        if image_stem != embed_stem:
+            raise ValueError(
+                f"Image/embed stem mismatch at position {idx}: {image_name} vs {embed_name}"
+            )
+
+
+_validate_image_embed_alignment(image_list, embed_list)
+
+
+def _parse_int_list_env(name, default):
+    raw_value = get_env_value(name, default=None)
+    if raw_value is None or raw_value.strip() == "":
+        return default
+
+    parsed_values = []
+    for item in raw_value.split(","):
+        item = item.strip()
+        if item:
+            parsed_values.append(int(item))
+
+    return parsed_values if parsed_values else default
+
+
+def _load_test_set_img_embeds():
+    features_path = get_env_value("MINDPILOT_TEST_IMAGE_FEATURES", default="")
+    if features_path and os.path.exists(features_path):
+        features = torch.load(features_path, weights_only=False)
+        if isinstance(features, dict):
+            if "img_features" in features:
+                features = features["img_features"]
+            elif "embed" in features:
+                features = features["embed"]
+            else:
+                first_key = next(iter(features.keys()))
+                features = features[first_key]
+        return features.cpu()
+
+    embeds = []
+    for embed_name in embed_list:
+        embed_path = os.path.join(embed_dir, embed_name)
+        embed = torch.load(embed_path, weights_only=False)
+        if isinstance(embed, dict):
+            if "img_features" in embed:
+                embed = embed["img_features"]
+            elif "embed" in embed:
+                embed = embed["embed"]
+            else:
+                first_key = next(iter(embed.keys()))
+                embed = embed[first_key]
+        embeds.append(embed.cpu())
+
+    return torch.stack(embeds).squeeze(1)
+
+
+test_set_img_embeds = _load_test_set_img_embeds()
+
+
+
+def main_loop(target_idx, seed=43):
     assert target_idx < len(image_list), f"target_idx exceeds image count range ({len(image_list)})"
     assert target_idx < len(embed_list), f"target_idx exceeds embed count range ({len(embed_list)})"
 
@@ -70,21 +139,51 @@ def main_loop(target_idx):
     print(f"Image: {target_image_path}")
     print(f"eeg_embed: {target_eeg_embed_path}")
 
-    # Remaining parameters unchanged
     sub = 'sub-01'
     fs = 250
     selected_channel_idxes = slice(None)
-    random.seed(43)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     dnn = 'alexnet'
-    encoding_model_path = f'/home/ldy/Workspace/Closed_loop_optimizing/kyw/closed-loop/EEG-encoding/EEG_encoder/results/{sub}/synthetic_eeg_data/encoding-end_to_end/dnn-{dnn}/modeled_time_points-all/pretrained-True/lr-1e-05__wd-0e+00__bs-064/model_state_dict.pt'
-    target_feature = torch.load(target_eeg_embed_path)
-    f_encoder =  "/home/ldy/Workspace/Closed_loop_optimizing/kyw/closed-loop/sub_model/sub-01/diffusion_alexnet/pretrained_True/gene_gene/ATM_S_reconstruction_scale_0_1000_40.pth"
-    checkpoint = torch.load(f_encoder, map_location=device)
+    encoding_model_path = get_env_value(
+        "IMG2EEG_MODEL_PATH",
+        default=os.path.join(
+            str(project_root),
+            "data",
+            "encoding_models_checkpoints",
+            sub,
+            "synthetic_eeg_data",
+            "encoding-end_to_end",
+            f"dnn-{dnn}",
+            "modeled_time_points-all",
+            "pretrained-True",
+            "lr-1e-05__wd-0e+00__bs-064",
+            "model_state_dict.pt",
+        ),
+    )
+    target_feature = torch.load(target_eeg_embed_path, weights_only=False)
+    f_encoder = get_env_value(
+        "EEG2CLIP_ENCODING_MODEL_PATH",
+        default=os.path.join(
+            str(project_root),
+            "data",
+            "sub_model",
+            sub,
+            "diffusion_250hz",
+            "ATM_S_reconstruction_scale_0_1000_40.pth",
+        ),
+    )
+    checkpoint = torch.load(f_encoder, map_location=device, weights_only=False)
     eeg_model = ATMS()
     eeg_model.load_state_dict(checkpoint['eeg_model_state_dict'])
 
-    save_path = f"/home/ldy/Workspace/Closed_loop_optimizing/outputs/iclr2026"
-    os.makedirs(save_path, exist_ok=True)
+    exp_save_dir = os.path.join(save_root, method_name, f"target_{target_idx}_seed_{seed}")
+    final_save_dir = os.path.join(exp_save_dir, "final")
+    plots_save_folder = os.path.join(exp_save_dir, "plots")
+    os.makedirs(final_save_dir, exist_ok=True)
+    os.makedirs(plots_save_folder, exist_ok=True)
+    print(f"Created experiment directory: {exp_save_dir}")
 
     def preprocess_image(image_path, device):
         transform = transforms.Compose([
@@ -541,7 +640,7 @@ def main_loop(target_idx):
         return cosine_sim
 
 
-    num_loops = 10
+    num_loops = int(get_env_value("HEURISTIC_NUM_LOOPS", default="10"))
 
     processed_paths = set()
 
@@ -557,40 +656,13 @@ def main_loop(target_idx):
     fit_eegs = []
     fit_rewards = []
     fit_losses = []
-    save_folder = f'/home/ldy/Workspace/Closed_loop_optimizing/outputs/iclr2026'
-
-    test_set_img_embeds = torch.load("/mnt/dataset1/ldy/Workspace/FLORA/data_preparing/ViT-H-14_features_test.pt")['img_features'].cpu()
-
-    # test_set_img_embeds = torch.load("/home/ldy/Workspace/Closed_loop_optimizing/data/clip_embed/open_clip/600_image_embeds.pt").cpu()
-    # Ensure base directory exists
-    os.makedirs(save_folder, exist_ok=True)
-    
-    # Create timestamp-based directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    timestamp_dir = os.path.join(save_folder, timestamp)
-    os.makedirs(timestamp_dir, exist_ok=True)
-    
-    # Find existing experiment directories under the timestamp directory
-    existing_exps = [d for d in os.listdir(timestamp_dir) if d.startswith('exp') and d[3:].isdigit()]
-    if existing_exps:
-        # Get the maximum experiment number
-        max_num = max(int(exp[3:]) for exp in existing_exps)
-        new_exp_num = max_num + 1
-    else:
-        # If no existing experiments, start from 1
-        new_exp_num = 1
-    # Create new experiment directory
-    new_exp_dir = os.path.join(timestamp_dir, f'exp{new_exp_num}')
-    os.makedirs(new_exp_dir, exist_ok=True)
-    print(f"Created new experiment directory: {new_exp_dir}")
-    plots_save_folder = f'{new_exp_dir}/plots'
-    os.makedirs(plots_save_folder, exist_ok=True)
+    print(f"Using output directory: {exp_save_dir}")
 
     Generator = HeuristicGenerator(pipe, vlmodel, preprocess_train, device=device)
 
     for t in range(num_loops):
         print(f"Loop {t + 1}/{num_loops}")
-        loop_save_dir = os.path.join(new_exp_dir, f'loop_{t+1}')
+        loop_save_dir = os.path.join(exp_save_dir, f'loop_{t+1}')
         os.makedirs(loop_save_dir, exist_ok=True)
         loop_sample_ten = []
         loop_reward_ten = []
@@ -614,7 +686,10 @@ def main_loop(target_idx):
             tensor_loop_sample_ten = [preprocess_train(i) for i in loop_sample_ten]    
             with torch.no_grad():
                 tensor_loop_sample_ten_embeds = vlmodel.encode_image(torch.stack(tensor_loop_sample_ten).to(device))        
-            Generator.pseudo_target_model.add_model_data(torch.tensor(tensor_loop_sample_ten_embeds).to(device), (-torch.tensor(loop_reward_ten) * Generator.reward_scaling_factor).to(device))        
+            Generator.pseudo_target_model.add_model_data(
+                tensor_loop_sample_ten_embeds.detach().clone().to(device),
+                (-torch.as_tensor(loop_reward_ten, device=device) * Generator.reward_scaling_factor),
+            )        
 
         else:                            
             # loop_sample_ten.extend(fit_images)
@@ -663,13 +738,13 @@ def main_loop(target_idx):
                 top_indices = sorted_available_indices[-TOP_K:]
 
                 # Randomly select one from top K
-                selected_idx = np.random.choice(top_indices)
+                selected_idx = int(np.random.choice(top_indices))
                 # print(f"available_paths {len(available_paths)}")            
                 # print(f"available_indices {available_indices}")
                 # print(f"selected_idx {selected_idx}")
-                greedy_image = Image.open(test_images_path[selected_idx]).convert("RGB")
+                greedy_image = Image.open(test_images_path[available_indices[selected_idx]]).convert("RGB")
                 greedy_images.append(greedy_image)
-                sample_image_paths.append(test_images_path[selected_idx])
+                sample_image_paths.append(test_images_path[available_indices[selected_idx]])
 
                 processed_paths.update(sample_image_paths)   
 
@@ -718,7 +793,10 @@ def main_loop(target_idx):
         tensor_loop_sample_ten = [preprocess_train(i) for i in loop_sample_ten]    
         with torch.no_grad():
             tensor_loop_sample_ten_embeds = vlmodel.encode_image(torch.stack(tensor_loop_sample_ten).to(device))        
-        Generator.pseudo_target_model.add_model_data(torch.tensor(tensor_loop_sample_ten_embeds).to(device), (-torch.tensor(loop_reward_ten) * Generator.reward_scaling_factor).to(device))        
+        Generator.pseudo_target_model.add_model_data(
+            tensor_loop_sample_ten_embeds.detach().clone().to(device),
+            (-torch.as_tensor(loop_reward_ten, device=device) * Generator.reward_scaling_factor),
+        )        
         visualize_top_images(loop_sample_ten, loop_reward_ten, loop_save_dir, t)
 
         # max_similarity = max(loop_reward_ten)
@@ -787,12 +865,18 @@ def main_loop(target_idx):
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
     plt.legend() 
-    path = os.path.join(save_path, 'similarities.jpg')
+    path = os.path.join(final_save_dir, 'similarities.jpg')
     plt.savefig(path)
     plt.show()
 
 if __name__ == '__main__':
-    for i in range(200):
-        if i<84: continue
-        main_loop(i)
+    target_indices = _parse_int_list_env(
+        "TARGET_INDICES",
+        default=[i for i in range(len(image_list))],
+    )
+    seed_values = _parse_int_list_env("TARGET_SEEDS", default=[43])
+
+    for target_idx in target_indices:
+        for seed in seed_values:
+            main_loop(target_idx, seed=seed)
         

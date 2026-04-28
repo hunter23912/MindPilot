@@ -1,0 +1,42 @@
+================================================================================
+CHANCE LEVEL (Random Baseline) Detailed Analysis
+================================================================================
+
+Method description:
+  Generates 5 images from random noise (without considering any target features)
+  Does not include any optimization or guidance process
+  Uses randomly initialized pseudo target embedding
+  Consistent with the Offline Generation random baseline implementation
+
+Statistical results:
+  EEG Score:
+    Mean: 0.5365
+    Std dev: 0.0226
+    Min: 0.4814
+    Max: 0.5987
+    Median: 0.5357
+
+  CLIP Score:
+    Mean: 0.5776
+    Std dev: 0.0236
+    Min: 0.5197
+    Max: 0.6494
+    Median: 0.5812
+
+  Sample count: 70 images
+  Experiment count: 14 runs
+
+Comparison with other methods:
+  Note: different methods have different optimization targets
+  - eeg_guidance: optimization target is EEG Score (primary metric)
+  - target_image_guidance: optimization target is CLIP Score (primary metric)
+
+  eeg_guidance:
+    EEG Score improvement: +5.01% <- primary optimization target
+    CLIP Score improvement: +13.88%
+
+  target_image_guidance:
+    EEG Score improvement: +2.94%
+    CLIP Score improvement: +32.05% <- primary optimization target
+
+================================================================================
