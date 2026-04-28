@@ -15,6 +15,7 @@ warnings.filterwarnings("ignore", message=".*`local_dir_use_symlinks`.*")
 
 import os
 import sys
+import re
 
 import json
 import pandas as pd
@@ -95,6 +96,38 @@ if not os.path.isdir(embed_dir):
 
 image_list = sorted([f for f in os.listdir(image_dir) if f.lower().endswith(('.jpg','.png','.jpeg'))])
 embed_list = sorted([f for f in os.listdir(embed_dir) if f.endswith('_embed.pt')])
+
+
+def _extract_dataset_index(filename):
+    match = re.match(r"^(\d+)_", os.path.basename(filename))
+    if match is None:
+        raise ValueError(f"Filename does not start with a numeric dataset index: {filename}")
+    return int(match.group(1))
+
+
+def _validate_image_embed_alignment(image_filenames, embed_filenames):
+    if len(image_filenames) != len(embed_filenames):
+        raise ValueError(
+            f"Image/embed count mismatch: {len(image_filenames)} images vs {len(embed_filenames)} embeds"
+        )
+
+    for idx, (image_name, embed_name) in enumerate(zip(image_filenames, embed_filenames)):
+        image_stem, _ = os.path.splitext(image_name)
+        embed_stem = embed_name.removesuffix("_embed.pt")
+        image_idx = _extract_dataset_index(image_name)
+        embed_idx = _extract_dataset_index(embed_name)
+
+        if image_stem != embed_stem:
+            raise ValueError(
+                f"Image/embed stem mismatch at position {idx}: {image_name} vs {embed_name}"
+            )
+        if image_idx != idx or embed_idx != idx:
+            raise ValueError(
+                f"Dataset index mismatch at position {idx}: image={image_name}, embed={embed_name}"
+            )
+
+
+_validate_image_embed_alignment(image_list, embed_list)
 
 
 class HeuristicGenerator:
@@ -303,12 +336,10 @@ def run_single_experiment(method, target_idx, seed, config):
     
     # Get image pool
     def get_image_pool(image_set_path):
-        test_images_path = []
-        for root, dirs, files in os.walk(image_set_path):
-            for file in sorted(files):
-                if file.lower().endswith(('.jpg', '.png', '.jpeg')):
-                    test_images_path.append(os.path.join(root, file))
-        return test_images_path
+        return [
+            os.path.join(image_set_path, file_name)
+            for file_name in image_list
+        ]
     
     test_images_path = get_image_pool(image_dir)
     if target_image_path in test_images_path:

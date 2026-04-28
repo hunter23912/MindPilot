@@ -15,6 +15,7 @@ Compares 7 methods:
 
 import os
 import sys
+import re
 
 from mindpilot_paths import get_project_root, load_mindpilot_env, resolve_config_values
 
@@ -69,6 +70,35 @@ class BenchmarkResult:
     
     def to_dict(self):
         return asdict(self)
+
+
+def _extract_dataset_index(filename: str) -> int:
+    match = re.match(r"^(\d+)_", os.path.basename(filename))
+    if match is None:
+        raise ValueError(f"Filename does not start with a numeric dataset index: {filename}")
+    return int(match.group(1))
+
+
+def _validate_image_embed_alignment(image_filenames: List[str], embed_filenames: List[str]) -> None:
+    if len(image_filenames) != len(embed_filenames):
+        raise ValueError(
+            f"Image/embed count mismatch: {len(image_filenames)} images vs {len(embed_filenames)} embeds"
+        )
+
+    for idx, (image_name, embed_name) in enumerate(zip(image_filenames, embed_filenames)):
+        image_stem, _ = os.path.splitext(image_name)
+        embed_stem = embed_name.removesuffix("_embed.pt")
+        image_idx = _extract_dataset_index(image_name)
+        embed_idx = _extract_dataset_index(embed_name)
+
+        if image_stem != embed_stem:
+            raise ValueError(
+                f"Image/embed stem mismatch at position {idx}: {image_name} vs {embed_name}"
+            )
+        if image_idx != idx or embed_idx != idx:
+            raise ValueError(
+                f"Dataset index mismatch at position {idx}: image={image_name}, embed={embed_name}"
+            )
 
 
 # ==================== HeuristicGenerator Class ====================
@@ -438,12 +468,12 @@ class PseudoModelWrapper(BaseMethod):
         
     def _get_image_pool(self, image_set_path):
         """Get candidate image pool"""
-        test_images_path = []
-        for root, dirs, files in os.walk(image_set_path):
-            for file in sorted(files):
-                if file.lower().endswith(('.jpg', '.png', '.jpeg')):
-                    test_images_path.append(os.path.join(root, file))
-        return test_images_path
+        image_files = sorted(
+            file_name
+            for file_name in os.listdir(image_set_path)
+            if file_name.lower().endswith(('.jpg', '.png', '.jpeg'))
+        )
+        return [os.path.join(image_set_path, file_name) for file_name in image_files]
     
     def _generate_eeg_from_image_paths(self, test_image_list, device):
         """Generate EEG from image paths (using base class method)"""
@@ -667,12 +697,12 @@ class HeuristicClosedLoopWrapper(BaseMethod):
     
     def _get_image_pool(self, image_set_path):
         """Get candidate image pool"""
-        test_images_path = []
-        for root, dirs, files in os.walk(image_set_path):
-            for file in sorted(files):
-                if file.lower().endswith(('.jpg', '.png', '.jpeg')):
-                    test_images_path.append(os.path.join(root, file))
-        return test_images_path
+        image_files = sorted(
+            file_name
+            for file_name in os.listdir(image_set_path)
+            if file_name.lower().endswith(('.jpg', '.png', '.jpeg'))
+        )
+        return [os.path.join(image_set_path, file_name) for file_name in image_files]
     
     def _fusion_image_generation(self, fit_images, fit_rewards):
         """
@@ -799,13 +829,15 @@ class HeuristicClosedLoopWrapper(BaseMethod):
         print(f"  [{self.name}] Config: fusions/round={self.num_fusions_per_round}, initial_samples={self.initial_sample_size}")
         
         # 1. Get image pool
-        image_pool = self._get_image_pool(self.config['image_dir'])
-        
-        # Exclude target image
-        if target_idx < len(image_pool):
-            target_image_path = image_pool[target_idx]
-            image_pool = [p for p in image_pool if p != target_image_path]
-            print(f"  [{self.name}] Excluded target image: {os.path.basename(target_image_path)}")
+        image_pool_full = self._get_image_pool(self.config['image_dir'])
+        if target_idx >= len(image_pool_full):
+            raise IndexError(
+                f"Target index {target_idx} is out of range for image pool of size {len(image_pool_full)}"
+            )
+
+        target_image_path = image_pool_full[target_idx]
+        image_pool = [p for p in image_pool_full if p != target_image_path]
+        print(f"  [{self.name}] Excluded target image: {os.path.basename(target_image_path)}")
         
         # 2. Pre-compute CLIP embeddings for all images (to avoid redundant computation)
         print(f"  [{self.name}] Pre-computing CLIP embeddings for {len(image_pool)} images...")
@@ -824,8 +856,8 @@ class HeuristicClosedLoopWrapper(BaseMethod):
         test_set_img_embeds = torch.cat(test_set_img_embeds_list, dim=0).to(self.device)
         del test_set_img_embeds_list, all_images_pil
         
-        # 3. Get target's CLIP embedding
-        target_image_path = image_pool[0] if target_idx >= len(image_pool) else image_pool[target_idx]
+        # 3. Get target's CLIP embedding from the original target image.
+        # Do not re-index into the filtered image_pool after exclusion, or the target shifts by one.
         target_image_pil = Image.open(target_image_path).convert("RGB")
         with torch.no_grad():
             target_clip_embed = self.vlmodel.encode_image(
@@ -2556,9 +2588,7 @@ class BenchmarkFramework:
         image_files = sorted([f for f in os.listdir(image_dir) 
                              if f.lower().endswith(('.jpg', '.png', '.jpeg'))])
         
-        # Ensure file counts match
-        assert len(embed_files) == len(image_files), \
-            f"Mismatch: {len(embed_files)} embeds vs {len(image_files)} images"
+        _validate_image_embed_alignment(image_files, embed_files)
         
         total_available = len(embed_files)
         
@@ -2807,5 +2837,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-

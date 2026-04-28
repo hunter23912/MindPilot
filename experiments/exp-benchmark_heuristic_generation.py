@@ -12,6 +12,7 @@ All methods are evaluated using the same metrics:
 
 import os
 import sys
+import re
 import json
 import pandas as pd
 from datetime import datetime
@@ -70,6 +71,38 @@ image_list = sorted([f for f in os.listdir(image_dir) if f.lower().endswith(('.j
 embed_list = sorted([f for f in os.listdir(embed_dir) if f.endswith('_embed.pt')])
 
 
+def _extract_dataset_index(filename):
+    match = re.match(r"^(\d+)_", os.path.basename(filename))
+    if match is None:
+        raise ValueError(f"Filename does not start with a numeric dataset index: {filename}")
+    return int(match.group(1))
+
+
+def _validate_image_embed_alignment(image_filenames, embed_filenames):
+    if len(image_filenames) != len(embed_filenames):
+        raise ValueError(
+            f"Image/embed count mismatch: {len(image_filenames)} images vs {len(embed_filenames)} embeds"
+        )
+
+    for idx, (image_name, embed_name) in enumerate(zip(image_filenames, embed_filenames)):
+        image_stem, _ = os.path.splitext(image_name)
+        embed_stem = embed_name.removesuffix("_embed.pt")
+        image_idx = _extract_dataset_index(image_name)
+        embed_idx = _extract_dataset_index(embed_name)
+
+        if image_stem != embed_stem:
+            raise ValueError(
+                f"Image/embed stem mismatch at position {idx}: {image_name} vs {embed_name}"
+            )
+        if image_idx != idx or embed_idx != idx:
+            raise ValueError(
+                f"Dataset index mismatch at position {idx}: image={image_name}, embed={embed_name}"
+            )
+
+
+_validate_image_embed_alignment(image_list, embed_list)
+
+
 class HeuristicGenerator:
     def __init__(self, pipe, vlmodel, preprocess_train, device="cuda", seed=42, load_ip_adapter=True, min_data_threshold=10):
         self.pipe = pipe
@@ -96,8 +129,6 @@ class HeuristicGenerator:
         # Initialize components
         self.pseudo_target_model = PseudoTargetModel(dimension=self.dimension, noise_level=1e-4).to(self.device)
         self.generator = torch.Generator(device=device).manual_seed(seed)
-        self.generated_image_counter = 0
-
         # Load IP adapter only if requested (to avoid repeated loading)
         if load_ip_adapter:
             self.pipe.load_ip_adapter(
@@ -158,22 +189,6 @@ class HeuristicGenerator:
         epsilon_init_norm = self.get_norm(epsilon_init)
         all_images = []
 
-        img_save_dir = None
-        if save_path is not None:
-            img_save_dir = os.path.join(save_path, "generated_imgs")
-            os.makedirs(img_save_dir, exist_ok=True)
-
-        def save_generated_images(images):
-            if img_save_dir is None:
-                return
-            for image in images:
-                save_name = os.path.join(
-                    img_save_dir,
-                    f"generated_{self.generated_image_counter:06d}.png",
-                )
-                image.save(save_name)
-                self.generated_image_counter += 1
-
         # Initialize pseudo target
         if start_embedding is not None:
             pseudo_target = start_embedding.expand(self.generate_batch_size, self.dimension).to(self.device)
@@ -197,7 +212,6 @@ class HeuristicGenerator:
                     eta=1.0,
                 ).images
                 final_images = self.latents_to_images(latents)
-                save_generated_images(final_images)
                 return final_images
             
             # Data sufficient, only perform pseudo_target optimization (no image generation)
@@ -217,7 +231,6 @@ class HeuristicGenerator:
             ).images
         
         final_images = self.latents_to_images(final_latents)
-        save_generated_images(final_images)
         
         # Clean up all intermediate variables from the generate function
         del epsilon, epsilon_init, epsilon_init_norm, pseudo_target, final_latents
@@ -426,12 +439,10 @@ def visualize_top_images(images, similarities, save_path):
 
 
 def get_image_pool(image_set_path):
-    test_images_path = []
-    for root, dirs, files in os.walk(image_set_path):
-        for file in sorted(files):
-            if file.lower().endswith(('.jpg', '.png', '.jpeg')):
-                test_images_path.append(os.path.join(root, file))
-    return test_images_path
+    return [
+        os.path.join(image_set_path, file_name)
+        for file_name in image_list
+    ]
 
 
 def run_single_experiment(method, target_idx, seed, config, vlmodel, preprocess_train, pipe):
@@ -508,8 +519,23 @@ def run_single_experiment(method, target_idx, seed, config, vlmodel, preprocess_
     if target_image_path in test_images_path:
         test_images_path.remove(target_image_path)
     
-    # Use externally provided test_set_img_embeds (avoid redundant loading)
-    test_set_img_embeds = config['test_set_img_embeds']
+    # Use externally provided test_set_img_embeds (avoid redundant loading).
+    # Keep it strictly aligned with test_images_path after excluding the target image.
+    full_test_set_img_embeds = config['test_set_img_embeds']
+    if full_test_set_img_embeds.shape[0] != len(image_list):
+        raise ValueError(
+            f"Image/embed feature count mismatch: {len(image_list)} images vs "
+            f"{full_test_set_img_embeds.shape[0]} precomputed embeddings"
+        )
+    test_set_img_embeds = torch.cat(
+        [full_test_set_img_embeds[:target_idx], full_test_set_img_embeds[target_idx + 1:]],
+        dim=0,
+    )
+    if test_set_img_embeds.shape[0] != len(test_images_path):
+        raise ValueError(
+            f"Filtered image/embed count mismatch after excluding target {target_idx}: "
+            f"{len(test_images_path)} images vs {test_set_img_embeds.shape[0]} embeddings"
+        )
     
     # Create experiment directory
     exp_save_dir = os.path.join(config['save_path'], method, f'target_{target_idx}_seed_{seed}')
@@ -1378,4 +1404,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
