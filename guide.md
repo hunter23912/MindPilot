@@ -197,54 +197,53 @@
 6. 将该向量作为条件输入生成模型，合成最终图像。
 7. 计算生成图像与原始目标的脑电相似度和语义相似度。
 
+## 9. 复现结果
+
+- eeg_guidance在EEG指标上最好，较随机提升约5.01%，说明closed-loop确实在朝脑信号目标优化。
+- target_image_guidance在CLIP指标上最好，较随机提升约32.05%，说明语义目标收敛非常明显。
+- 从可视化样本看，target_image_guidance的语义收敛更好，eeg_guidance更像收敛到高纹理但语义偏掉的图像簇。说明EEG引导有效，但语义可解释性弱于图像目标引导。
+
 ---
 
 **核心思想回顾**：MindPilot 利用少量探索获得的奖励信息，构建一个从“图像看起来像什么”到“它能引发什么大脑反应”的预测模型，然后在该模型的指引下搜索最佳图像表达，最终用生成模型合成新图像。整个过程无需文本提示，也不依赖目标图像，仅靠脑电信号完成从探索到生成的全流程。
 
 当前启发式benchmark脚本生成的目录非常混乱,是类似这样的：
+
 - benchmark_results_total/benchmark_heuristic_generation/
-   - 时间戳/
-      - eeg_guidance/
-         - target_x_seed_y/
-            - loop1/
-               visualization_iteration_0.png
-               - generated_imgs/(空)
-            - loop2/
-            ...
-            - plots/(空)
-            - final_generated_0.png
-            - final_generated_1.png
-            - similarities.jpg
-            ...
-   - 时间戳/
-      - target_image_guidance/
-         - target_x_seed_y/
-            - loop1/
-               visualization_iteration_0.png
-               - generated_imgs/(空)
-            - loop2/
-            ...
-            - plots/(空)
-            - final_generated_0.png
-            - final_generated_1.png
-            - similarities.jpg
-            ...
+  - 时间戳/
+    - eeg_guidance/
+      - target_x_seed_y/
+        - loop1/ visualization_iteration_0.png
+          - generated_imgs/(空)
+        - loop2/ ...
+        - plots/(空)
+        - final_generated_0.png
+        - final_generated_1.png
+        - similarities.jpg ...
+  - 时间戳/
+    - target_image_guidance/
+      - target_x_seed_y/
+        - loop1/ visualization_iteration_0.png
+          - generated_imgs/(空)
+        - loop2/ ...
+        - plots/(空)
+        - final_generated_0.png
+        - final_generated_1.png
+        - similarities.jpg ...
 
 请你修改为：
+
 - benchmark_results_total/benchmark_heuristic_generation/
-   - eeg_guidance/
-      - target_x_seed_y/
-         - loop1.png
-         - loop2.png
-         ...
-         - final/
-            - final_generated_0.png
-            - final_generated_1.png
-            - final_generated_2.png
-            - final_generated_3.png
-            - final_generated_4.png
-            - similarities.jpg
-   - target_image_guidance/
-      ...
-   - random_generation/
-      ...
+  - eeg_guidance/
+    - target_x_seed_y/
+      - loop1.png
+      - loop2.png ...
+      - final/
+        - final_generated_0.png
+        - final_generated_1.png
+        - final_generated_2.png
+        - final_generated_3.png
+        - final_generated_4.png
+        - similarities.jpg
+  - target_image_guidance/ ...
+  - random_generation/ ...
